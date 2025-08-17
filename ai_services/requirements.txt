@@ -1,0 +1,21 @@
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+ollama
+
+python-dotenv
+
+# Crew & LLM plumbing
+crewai
+langchain
+langchain-community
+langchain-google-genai
+
+# Persistence
+SQLAlchemy>=2.0
+asyncpg
+pgvector
+
+# Embeddings (open source)
+sentence-transformers

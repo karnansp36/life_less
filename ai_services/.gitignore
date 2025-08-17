@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.env.*
+.venv/
+env/
+venv/
+
+# FastAPI / CrewAI logs
+*.log
+*.sqlite3
+
+# Node.js (if MERN frontend included here)
+node_modules/
+dist/
+build/
+.npm/
+
+# Jupyter / experiments
+.ipynb_checkpoints/
+*.ipynb
+
+# OS / Editor files
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# AI / ML stuff
