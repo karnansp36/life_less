@@ -76,22 +76,88 @@
 #         except Exception as e:
 #             raise ValueError(f"Unexpected error: {str(e)}") from e
 
-
-import os, json, httpx
+import os
+import httpx
+import json
+from typing import Optional
+from dotenv import load_dotenv
 from app.settings import settings
 
-TIMEOUT = 30.0
+load_dotenv()
 
-async def generate_with_gemini_raw(prompt: str) -> str:
+TIMEOUT = 30.0  # seconds
+
+async def generate_with_gemini(prompt: str, model: Optional[str] = None) -> str:
+    """Generate content using Gemini API with robust error handling"""
+    # Validate inputs
     if not settings.GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY not set")
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent?key={settings.GEMINI_API_KEY}"
-    body = { "contents": [{ "parts": [{ "text": prompt }]}] }
+        raise ValueError("GEMINI_API_KEY environment variable not set")
+    if not prompt or not isinstance(prompt, str):
+        raise ValueError("Prompt must be a non-empty string")
+
+    # Use provided model or default from settings
+    model_name = model or settings.GEMINI_MODEL or "gemini-pro"
+    
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={settings.GEMINI_API_KEY}"
+    headers = {"Content-Type": "application/json"}
+    body = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "topP": 0.9,
+            "maxOutputTokens": 2048
+        }
+    }
+
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
-        resp = await client.post(url, headers={"Content-Type": "application/json"}, json=body)
-        resp.raise_for_status()
-        data = resp.json()
         try:
-            return data["candidates"][0]["content"]["parts"][0]["text"]
-        except Exception:
-            raise ValueError(f"Unexpected Gemini response: {json.dumps(data)[:800]}")
+            # Make the API request
+            resp = await client.post(url, headers=headers, json=body)
+            
+            # Check for HTTP errors
+            resp.raise_for_status()
+            
+            # Parse and validate response
+            try:
+                data = resp.json()
+                if not data.get("candidates"):
+                    raise ValueError("No candidates in response")
+                
+                candidate = data["candidates"][0]
+                if not candidate.get("content", {}).get("parts"):
+                    raise ValueError("Missing content parts in response")
+                
+                return candidate["content"]["parts"][0]["text"]
+                
+            except (KeyError, IndexError) as e:
+                error_detail = {
+                    "error": "Unexpected response structure",
+                    "response": data,
+                    "expected_structure": {
+                        "candidates": [{
+                            "content": {
+                                "parts": [{
+                                    "text": "response text"
+                                }]
+                            }
+                        }]
+                    }
+                }
+                raise ValueError(json.dumps(error_detail, indent=2)) from e
+                
+        except httpx.HTTPStatusError as e:
+            # Extract detailed error message from response
+            try:
+                error_data = e.response.json()
+                error_msg = error_data.get("error", {}).get("message", str(e))
+            except json.JSONDecodeError:
+                error_msg = str(e)
+            
+            raise ValueError(f"Gemini API error: {error_msg}") from e
+            
+        except httpx.RequestError as e:
+            raise ValueError(f"Network error: {str(e)}") from e
+        except Exception as e:
+            raise ValueError(f"Unexpected error: {str(e)}") from e

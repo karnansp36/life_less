@@ -6,7 +6,7 @@ from app.services.memory import (
     short_append, short_context, ensure_conversation, persist_message,
     add_user_memory, semantic_retrieve_user_memory, join_context
 )
-from app.agents.chat import run_chat_agent
+from app.providers.gemini import generate_with_gemini
 
 router = APIRouter()
 
@@ -37,13 +37,15 @@ async def chat(body: ChatIn, session: AsyncSession = Depends(get_session)):
 
     memory_block = join_context(short_ctx, long_ctx)
 
-    # Run CrewAI agent
-    reply = run_chat_agent(prompt=prompt, memory_block=memory_block)
+    # ✅ Direct Gemini call instead of CrewAI
+    reply = await generate_with_gemini(
+        f"{memory_block}\n\nUser: {prompt}\nAssistant:"
+    )
 
     # Persist assistant reply
     await persist_message(session, conv.id, body.user_id, "assistant", reply)
 
-    # Heuristic: promote key facts to long-term memory (very simple rule, expand later)
+    # Heuristic: promote key facts to long-term memory
     if len(prompt) < 200 and any(x in prompt.lower() for x in ["i like", "my name", "remind", "preference", "birthday"]):
         await add_user_memory(session, body.user_id, text=prompt, kind="preference")
 

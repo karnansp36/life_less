@@ -9,7 +9,7 @@ class Settings:
     AI_PROVIDER = os.getenv("AI_PROVIDER", "gemini").lower()
 
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-001")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "google/gemini-pro")  # Add provider prefix
 
     OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
     MISTRAL_MODEL = os.getenv("MISTRAL_MODEL", "mistral:latest")
