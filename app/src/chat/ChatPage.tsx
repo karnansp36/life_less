@@ -1,4 +1,3 @@
-// src/chat/ChatPage.tsx
 import { useState, useRef, useEffect } from 'react';
 import { chatWithAI } from 'wasp/client/operations';
 import { Loader2, Send, Bot, User } from 'lucide-react';
@@ -16,6 +15,7 @@ export default function ChatPage() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom
@@ -32,20 +32,32 @@ export default function ChatPage() {
       id: Date.now().toString(),
       role: 'user',
       content: input,
+      conversationId,
     };
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
 
     try {
-      // Call AI - response is now properly typed
-      const { reply } = await chatWithAI({ message: input });
-      
+      // Call backend
+      const { reply, provider, conversation_id, agent_used, success, metadata } = await chatWithAI({
+        message: input,
+        conversation_id: conversationId ? parseInt(conversationId) : undefined,
+      });
+
+      // Save conversation_id for future turns
+      if (conversation_id) {
+        setConversationId(conversation_id.toString());
+      }
+
       // Add AI response
       const aiMessage: Message = {
         id: Date.now().toString(),
         role: 'assistant',
         content: reply,
+        agentUsed: agent_used,
+        conversationId: conversation_id?.toString(),
+        metadata,
       };
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
@@ -95,16 +107,12 @@ export default function ChatPage() {
               {messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex gap-2.5 ${
-                    message.role === 'user' ? 'flex-row-reverse' : ''
-                  }`}
+                  className={`flex gap-2.5 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
                 >
                   {/* Avatar */}
                   <div
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                      message.role === 'user'
-                        ? 'bg-primary'
-                        : 'bg-muted'
+                      message.role === 'user' ? 'bg-primary' : 'bg-muted'
                     }`}
                   >
                     {message.role === 'user' ? (
@@ -122,9 +130,19 @@ export default function ChatPage() {
                         : 'bg-muted/50'
                     }`}
                   >
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">
-                      {message.content}
-                    </p>
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
+
+                    {/* Show extra info only for assistant */}
+                    {message.role === 'assistant' && (
+                      <div className="mt-1 text-[10px] text-muted-foreground/70">
+                        {message.agentUsed && <span>Agent: {message.agentUsed}</span>}
+                        {message.metadata?.processing_time !== undefined && (
+                          <span className="ml-2">
+                            Time: {message.metadata.processing_time}ms
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -138,9 +156,7 @@ export default function ChatPage() {
                   <div className="rounded-2xl bg-muted/50 px-3 py-2.5">
                     <div className="flex items-center gap-2">
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">
-                        Thinking...
-                      </span>
+                      <span className="text-sm text-muted-foreground">Thinking...</span>
                     </div>
                   </div>
                 </div>
@@ -170,11 +186,7 @@ export default function ChatPage() {
                 disabled={isLoading || !input.trim()}
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full p-0"
               >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Send className="h-4 w-4" />
-                )}
+                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
             </div>
           </form>

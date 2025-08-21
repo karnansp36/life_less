@@ -1,21 +1,16 @@
 fastapi
 uvicorn[standard]
-pydantic
-httpx
-ollama
-
-python-dotenv
-
-# Crew & LLM plumbing
-crewai
-langchain
-langchain-community
-langchain-google-genai
-
-# Persistence
-SQLAlchemy>=2.0
+sqlalchemy
 asyncpg
+alembic
+python-dotenv
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+aiohttp
 pgvector
-
-# Embeddings (open source)
-# sentence-transformers
+sentence-transformers
+numpy
+pydantic
+pydantic-settings
+python-dateutil

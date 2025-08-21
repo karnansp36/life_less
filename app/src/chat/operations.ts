@@ -1,85 +1,70 @@
 // src/chat/operations.ts
-import { HttpError } from 'wasp/server';
-import type {  Message } from './types';
+import { HttpError } from "wasp/server";
+// import type {  Message } from './types';
 
 export type ChatResponse = {
-  reply: string;
+  reply: string; // keep reply for frontend
   provider?: string;
+  conversation_id?: number;
+  agent_used?: string;
+  success?: boolean;
+  metadata?: {
+    memories_used?: number;
+    processing_time?: number;
+  };
+};
+export type ChatArgs = {
+  message: string;
+  conversation_id?: number;
 };
 
 export const chatWithAI = async (
-  args: { message: string },
+  args: ChatArgs,
   context: any
 ): Promise<ChatResponse> => {
   if (!context.user) {
-    throw new HttpError(401, 'User not authenticated');
+    throw new HttpError(401, "User not authenticated");
   }
 
   try {
-    const response = await fetch('http://127.0.0.1:8000/chat/', {
-      method: 'POST',
+    const response = await fetch("http://127.0.0.1:8000/api/chat/", {
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
-      credentials: 'include',
-      body: JSON.stringify({ 
-        prompt: args.message,
-        user_id: context.user.id // Include user ID from context
+      credentials: "include",
+      body: JSON.stringify({
+        message: args.message,
+        conversation_id: args.conversation_id ?? null,
+        user_id: context.user.id.toString(),
+        metadata: {},
       }),
     });
 
     const data = await response.json();
 
     if (!response.ok || data.error) {
-      const errorMessage = data.error || 'AI service error';
-      throw new HttpError(response.status, errorMessage);
+      throw new HttpError(response.status, data.error || "AI service error");
     }
 
-    return { 
-      reply: data.reply,
-      provider: data.provider
+    // ✅ map response -> frontend contract
+    return {
+      reply: data.response,
+      provider: data.agent_used,
+      conversation_id: data.conversation_id,
+      agent_used: data.agent_used,
+      success: data.success,
+      metadata: data.metadata,
     };
   } catch (error) {
-    console.error('Chat error:', error);
-    if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new HttpError(503, 'Failed to connect to AI service');
+    console.error("Chat error:", error);
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      throw new HttpError(503, "Failed to connect to AI service");
     }
-    if (error instanceof HttpError) {
-      throw error;
-    }
-    throw new HttpError(500, error instanceof Error ? error.message : 'Unknown error');
-  }
-};
-
-// Add new operation to fetch conversation history
-export const getConversationHistory = async (
-  args: {},
-  context: any
-): Promise<Message[]> => {
-  if (!context.user) {
-    throw new HttpError(401, 'User not authenticated');
-  }
-
-  try {
-    const response = await fetch(`http://127.0.0.1:8000/conversation/${context.user.id}`, {
-      method: 'GET',
-      credentials: 'include',
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || data.error) {
-      throw new HttpError(response.status, data.error || 'Failed to fetch history');
-    }
-
-    return data.messages.map((msg: any) => ({
-      id: msg.id.toString(),
-      role: msg.role,
-      content: msg.content,
-      createdAt: msg.created_at
-    }));
-  } catch (error) {
-    console.error('History fetch error:', error);
-    throw new HttpError(500, 'Failed to load conversation history');
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(
+      500,
+      error instanceof Error ? error.message : "Unknown error"
+    );
   }
 };
