@@ -35,7 +35,9 @@ export const chatWithAI = async (
       credentials: "include",
       body: JSON.stringify({
         message: args.message,
-        conversation_id: args.conversation_id ?? null,
+        conversation_id: args.conversation_id
+          ? String(args.conversation_id)
+          : null, // must be string or null
         user_id: context.user.id.toString(),
         metadata: {},
       }),
@@ -49,13 +51,13 @@ export const chatWithAI = async (
 
     // ✅ map response -> frontend contract
     return {
-      reply: data.response,
-      provider: data.agent_used,
+      reply: data.response, // map response -> reply
+      provider: data.agent_used, // optional alias
       conversation_id: data.conversation_id,
       agent_used: data.agent_used,
       success: data.success,
       metadata: data.metadata,
-    };
+    } as const;
   } catch (error) {
     console.error("Chat error:", error);
     if (error instanceof TypeError && error.message.includes("fetch")) {

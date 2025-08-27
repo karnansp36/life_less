@@ -1,16 +1,6 @@
-# app/models/__init__.py
-from .models import User, Conversation, Message, Memory, Habit, HabitCompletion, Expense, Goal, Milestone, EmailAccount, EmailMessage
+from app.core.database import Base
+from .database import Conversation, Message, PersonaSettings, ProactiveEvent, User
 
-__all__ = [
-    'User',
-    'Conversation', 
-    'Message',
-    'Memory',
-    'Habit',
-    'HabitCompletion',
-    'Expense',
-    'Goal',
-    'Milestone',
-    'EmailAccount',
-    'EmailMessage'
-]
+# ... add any other models
+
+__all__ = ["User", "Conversation", "Message", "PersonaSettings", "ProactiveEvent"]
