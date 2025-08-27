@@ -1,16 +1,34 @@
 fastapi
 uvicorn[standard]
+websockets
 sqlalchemy
-asyncpg
+psycopg2-binary
 alembic
-python-dotenv
-python-multipart
-python-jose[cryptography]
-passlib[bcrypt]
-aiohttp
-pgvector
-sentence-transformers
-numpy
 pydantic
 pydantic-settings
-python-dateutil
+redis
+python-dotenv
+
+# AI and ML
+google-generativeai
+anthropic
+# sentence-transformers
+numpy
+scikit-learn
+
+# Background tasks
+celery
+flower
+
+# Monitoring and logging
+prometheus-client
+structlog
+
+# Development
+pytest
+pytest-asyncio
+httpx
+black
+isort
+
+psutil
