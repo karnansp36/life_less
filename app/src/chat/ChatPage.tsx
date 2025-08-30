@@ -1,71 +1,104 @@
-import { useState, useRef, useEffect } from 'react';
-import { chatWithAI } from 'wasp/client/operations';
-import { Loader2, Send, Bot, User } from 'lucide-react';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import type { Message } from './types';
+// src/chat/ChatPage.tsx
+import { useState, useRef, useEffect } from "react";
+import { chatWithAI } from "wasp/client/operations";
+import { Loader2, Send, Bot, User } from "lucide-react";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import type { Message } from "./types";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([
     {
-      id: '1',
-      role: 'assistant',
-      content: 'Hello! How can I help you today?',
+      id: "1",
+      role: "assistant",
+      content: "Hello! How can I help you today?",
     },
   ]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [conversationId, setConversationId] = useState<string | undefined>(undefined);
+  const [conversationId, setConversationId] = useState<string | undefined>(
+    undefined
+  );
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [sessionId] = useState(() => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
-  // Auto-scroll to bottom
+  // Auto-scroll to bottom whenever messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Debug: Log session ID on component mount
+  useEffect(() => {
+    console.log('=== DEBUG: ChatPage mounted ===');
+    console.log('Session ID:', sessionId);
+    console.log('Initial conversationId:', conversationId);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
 
-    // Add user message
     const userMessage: Message = {
       id: Date.now().toString(),
-      role: 'user',
+      role: "user",
       content: input,
       conversationId,
     };
+
     setMessages((prev) => [...prev, userMessage]);
-    setInput('');
+    setInput("");
     setIsLoading(true);
 
+    console.log('=== DEBUG: Starting chat request ===');
+    console.log('Input message:', input);
+    console.log('Conversation ID:', conversationId);
+    console.log('Session ID:', sessionId);
+    console.log('==============================');
+
     try {
-      // Call backend
-      const { reply, provider, conversation_id, agent_used, success, metadata } = await chatWithAI({
+      const { reply, agent_used, conversation_id, metadata, agent_insights } = await chatWithAI({
         message: input,
         conversation_id: conversationId ? parseInt(conversationId) : undefined,
+        session_id: sessionId,
       });
 
-      // Save conversation_id for future turns
+      console.log('=== DEBUG: Chat response received ===');
+      console.log('Reply:', reply);
+      console.log('Agent used:', agent_used);
+      console.log('New conversation_id:', conversation_id);
+      console.log('Metadata:', metadata);
+      console.log('Agent insights:', agent_insights);
+      console.log('==============================');
+
       if (conversation_id) {
         setConversationId(conversation_id.toString());
+        console.log('Updated conversationId:', conversation_id.toString());
       }
 
-      // Add AI response
       const aiMessage: Message = {
         id: Date.now().toString(),
-        role: 'assistant',
+        role: "assistant",
         content: reply,
         agentUsed: agent_used,
         conversationId: conversation_id?.toString(),
         metadata,
+        agentInsights: agent_insights,
       };
+
       setMessages((prev) => [...prev, aiMessage]);
-    } catch (error) {
-      // Add error message
+
+    } catch (err: any) {
+      console.error('=== DEBUG: Chat error ===');
+      console.error('Error:', err);
+      console.error('Error name:', err?.name);
+      console.error('Error message:', err?.message);
+      console.error('Error status:', err?.status);
+      console.error('==============================');
+
       const errorMessage: Message = {
         id: Date.now().toString(),
-        role: 'assistant',
-        content: 'Sorry, I encountered an error. Please try again.',
+        role: "assistant",
+        content: err?.message || "Sorry, I encountered an error. Please try again.",
       };
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
@@ -84,87 +117,81 @@ export default function ChatPage() {
             </div>
             <h1 className="text-base font-semibold">AI Assistant</h1>
           </div>
+          {/* Debug info */}
+          <div className="ml-auto text-xs text-muted-foreground">
+            Session: {sessionId.substring(0, 8)}...
+          </div>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl px-4 sm:px-6">
-          {messages.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
-              <div className="text-center">
-                <Bot className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                <p className="mt-4 text-lg font-medium text-muted-foreground">
-                  Start a conversation
+        <div className="mx-auto max-w-3xl px-4 sm:px-6 py-4 space-y-4">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex gap-2.5 ${
+                message.role === "user" ? "flex-row-reverse" : ""
+              }`}
+            >
+              {/* Avatar */}
+              <div
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                  message.role === "user" ? "bg-primary" : "bg-muted"
+                }`}
+              >
+                {message.role === "user" ? (
+                  <User className="h-3.5 w-3.5 text-primary-foreground" />
+                ) : (
+                  <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+              </div>
+
+              {/* Message Bubble */}
+              <div
+                className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3 py-2.5 ${
+                  message.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/50"
+                }`}
+              >
+                <p className="text-sm leading-relaxed whitespace-pre-wrap">
+                  {message.content}
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground/75">
-                  Ask me anything and I'll help you out.
-                </p>
+                {message.role === "assistant" && (
+                  <div className="mt-1 text-[10px] text-muted-foreground/70">
+                    {message.agentUsed && <span>Agent: {message.agentUsed}</span>}
+                    {message.metadata?.processing_time !== undefined && (
+                      <span className="ml-2">
+                        Time: {message.metadata.processing_time}ms
+                      </span>
+                    )}
+                    {message.agentInsights?.model_used && (
+                      <span className="ml-2">
+                        Model: {message.agentInsights.model_used}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-          ) : (
-            <div className="space-y-4 py-4">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-2.5 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
-                >
-                  {/* Avatar */}
-                  <div
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
-                      message.role === 'user' ? 'bg-primary' : 'bg-muted'
-                    }`}
-                  >
-                    {message.role === 'user' ? (
-                      <User className="h-3.5 w-3.5 text-primary-foreground" />
-                    ) : (
-                      <Bot className="h-3.5 w-3.5 text-muted-foreground" />
-                    )}
-                  </div>
+          ))}
 
-                  {/* Message */}
-                  <div
-                    className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-3 py-2.5 ${
-                      message.role === 'user'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted/50'
-                    }`}
-                  >
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</p>
-
-                    {/* Show extra info only for assistant */}
-                    {message.role === 'assistant' && (
-                      <div className="mt-1 text-[10px] text-muted-foreground/70">
-                        {message.agentUsed && <span>Agent: {message.agentUsed}</span>}
-                        {message.metadata?.processing_time !== undefined && (
-                          <span className="ml-2">
-                            Time: {message.metadata.processing_time}ms
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
+          {/* Loading Indicator */}
+          {isLoading && (
+            <div className="flex gap-2.5">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
+                <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+              </div>
+              <div className="rounded-2xl bg-muted/50 px-3 py-2.5">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Thinking...</span>
                 </div>
-              ))}
-
-              {/* Loading indicator */}
-              {isLoading && (
-                <div className="flex gap-2.5">
-                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
-                    <Bot className="h-3.5 w-3.5 text-muted-foreground" />
-                  </div>
-                  <div className="rounded-2xl bg-muted/50 px-3 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                      <span className="text-sm text-muted-foreground">Thinking...</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
+              </div>
             </div>
           )}
+          <div ref={messagesEndRef} />
         </div>
       </div>
 
@@ -186,7 +213,11 @@ export default function ChatPage() {
                 disabled={isLoading || !input.trim()}
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full p-0"
               >
-                {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4" />
+                )}
               </Button>
             </div>
           </form>
