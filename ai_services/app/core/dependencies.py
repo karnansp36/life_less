@@ -1,41 +1,32 @@
 from fastapi import Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional, Dict, AsyncGenerator
-from app.core.database import get_db, AsyncSessionLocal
-import jwt
-from datetime import datetime
+from typing import AsyncGenerator
+from app.core.database import AsyncSessionLocal
+import os
 
-# Simple user dependency for development
-async def get_current_user(request: Request = None) -> Optional[Dict]:
-    """
-    Placeholder authentication dependency
-    In production, implement proper JWT/OAuth authentication
-    """
-    # For development, return default user
-    return {
-        "user_id": 1,
-        "username": "default_user",
-        "email": "user@example.com",
-        "is_active": True
-    }
+# Load API secret from environment variable (set in .env)
+API_SECRET = os.getenv("API_SECRET_KEY", "supersecretapikey")
 
-def get_user_from_token(token: str) -> Optional[Dict]:
+async def verify_api_key(request: Request):
     """
-    Validate JWT token and return user info
-    Placeholder implementation - replace with actual JWT validation
+    Simple API key authentication: only Wasp backend can call FastAPI.
     """
-    try:
-        # In production, implement proper JWT decoding
-        # payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        # return payload
-        return {"user_id": 1, "username": "default_user"}
-    except Exception:
-        return None
-    
-async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
+    api_key = request.headers.get("x-api-key")
+    if not api_key or api_key != API_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API Key"
+        )
+    return {"service": "wasp-backend"}
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Get async database session"""
     async with AsyncSessionLocal() as db:
         try:
             yield db
         finally:
             await db.close()
+
+
+
+

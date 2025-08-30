@@ -1,20 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
-from app.core.dependencies import get_db, get_current_user
-from app.models.schemas import PersonaSettingsCreate, PersonaSettingsUpdate, PersonaSettingsResponse
+from app.core.dependencies import get_db, verify_api_key
+from app.models.schemas import PersonaSettingsUpdate, PersonaSettingsResponse
 from app.services.persona_service import persona_service
 import logging
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
 @router.get("/settings/{user_id}", response_model=PersonaSettingsResponse)
 async def get_persona_settings(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[Dict] = Depends(get_current_user)
+    _: Dict = Depends(verify_api_key),   # ✅ replaced get_current_user
 ):
     """Get persona settings for a user"""
     try:
@@ -35,12 +36,13 @@ async def get_persona_settings(
         logger.error(f"Error getting persona settings for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.put("/settings/{user_id}", response_model=PersonaSettingsResponse)
 async def update_persona_settings(
     user_id: int,
     updates: PersonaSettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: Optional[Dict] = Depends(get_current_user)
+    _: Dict = Depends(verify_api_key),   # ✅ API key auth
 ):
     """Update persona settings for a user"""
     try:
@@ -61,8 +63,9 @@ async def update_persona_settings(
         logger.error(f"Error updating persona settings for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/presets")
-async def get_persona_presets():
+async def get_persona_presets(_: Dict = Depends(verify_api_key)):
     """Get available persona presets"""
     presets = {
         "professional": {
@@ -140,12 +143,13 @@ async def get_persona_presets():
         "default": "friendly"
     }
 
+
 @router.post("/settings/{user_id}/apply-preset")
 async def apply_persona_preset(
     user_id: int,
     preset_data: Dict[str, Any],
     db: Session = Depends(get_db),
-    current_user: Optional[Dict] = Depends(get_current_user)
+    _: Dict = Depends(verify_api_key),
 ):
     """Apply a persona preset to user settings"""
     try:
@@ -153,7 +157,6 @@ async def apply_persona_preset(
         if not preset_name:
             raise HTTPException(status_code=400, detail="preset_name is required")
         
-        # Get presets
         presets_response = await get_persona_presets()
         presets = presets_response["presets"]
         
@@ -186,11 +189,12 @@ async def apply_persona_preset(
         logger.error(f"Error applying preset for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/welcome-message/{user_id}")
 async def get_welcome_message(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[Dict] = Depends(get_current_user)
+    _: Dict = Depends(verify_api_key),
 ):
     """Generate a welcome message based on user's persona"""
     try:
@@ -206,11 +210,12 @@ async def get_welcome_message(
         logger.error(f"Error generating welcome message for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/personality-insights/{user_id}")
 async def get_personality_insights(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[Dict] = Depends(get_current_user)
+    _: Dict = Depends(verify_api_key),
 ):
     """Get insights about the current persona configuration"""
     try:
@@ -231,15 +236,20 @@ async def get_personality_insights(
             "recommendations": []
         }
         
-        # Add recommendations based on configuration
         if persona.personality_traits.get("empathy") == "high":
-            insights["recommendations"].append("Your AI is configured for high emotional intelligence - great for personal conversations")
+            insights["recommendations"].append(
+                "Your AI is configured for high emotional intelligence - great for personal conversations"
+            )
         
         if "technology" in (persona.ai_interests or []):
-            insights["recommendations"].append("Your AI enjoys discussing technology and innovation")
+            insights["recommendations"].append(
+                "Your AI enjoys discussing technology and innovation"
+            )
         
         if persona.communication_style.get("formality") == "professional":
-            insights["recommendations"].append("Your AI uses professional communication - perfect for work-related discussions")
+            insights["recommendations"].append(
+                "Your AI uses professional communication - perfect for work-related discussions"
+            )
         
         return insights
         

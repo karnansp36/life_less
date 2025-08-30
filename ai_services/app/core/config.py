@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True  # Set to True for development
     
     # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@localhost/chatdb")
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379")
     
     # AI Models
@@ -46,7 +46,8 @@ class Settings(BaseSettings):
     # Security (add these for production)
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-   
+    API_SECRET_KEY: str
+
     class Config:
         case_sensitive = True
         env_file = ".env"
