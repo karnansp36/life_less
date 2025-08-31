@@ -5,6 +5,8 @@ from typing import Dict
 import json
 import logging
 from datetime import datetime
+from sqlalchemy import select, func
+from app.models import Message
 
 from app.core.dependencies import verify_api_key
 from app.services.memory_service import memory_service
@@ -19,10 +21,24 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # ======================
-# WebSocket endpoint
+# WebSocket endpoint (with API Key auth)
 # ======================
 @router.websocket("/ws/chat/{user_id}/{session_id}")
 async def websocket_endpoint(websocket: WebSocket, user_id: int, session_id: str):
+    from app.core.dependencies import API_SECRET
+
+    # 🔹 API key validation BEFORE connect()
+    api_key = websocket.query_params.get("api_key") or websocket.headers.get("x-api-key")
+    if not api_key or api_key != API_SECRET:
+        await websocket.accept()   # must accept before sending/closing
+        await websocket.send_text(json.dumps({
+            "type": "error",
+            "message": "Invalid or missing API key"
+        }))
+        await websocket.close(code=1008)
+        return
+
+    # 🔹 SocketManager.connect() will accept the connection
     await socket_manager.connect(websocket, user_id, session_id)
     await proactive_service.start_proactive_monitoring(user_id)
 
@@ -32,26 +48,32 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, session_id: str
                 async_db, user_id, session_id
             )
             persona_settings = await persona_service.get_persona_settings(async_db, user_id)
-            if len(conversation.messages) == 0:
+
+            count = await async_db.execute(
+                        select(func.count(Message.id)).where(Message.conversation_id == conversation.id)
+                        )
+            message_count = count.scalar_one()
+
+            if message_count == 0:
                 welcome_msg = persona_service.generate_welcome_message(persona_settings)
                 await socket_manager.send_personal_message(
-                    welcome_msg, websocket, "welcome",
-                    {"persona": persona_settings.ai_name}
-                )
+                        welcome_msg, websocket, "welcome", {"persona": persona_settings.ai_name}
+                        )
 
+            # Main loop
             while True:
                 try:
                     data = await websocket.receive_text()
                     try:
                         msg_data = json.loads(data)
-                        user_message = msg_data.get('message', data)
-                        message_type = msg_data.get('type', 'chat')
+                        user_message = msg_data.get("message", data)
+                        message_type = msg_data.get("type", "chat")
                     except:
                         user_message = data
-                        message_type = 'chat'
+                        message_type = "chat"
 
-                    if message_type in ['typing', 'heartbeat']:
-                        if message_type == 'heartbeat':
+                    if message_type in ["typing", "heartbeat"]:
+                        if message_type == "heartbeat":
                             await websocket.send_text(json.dumps({"type": "heartbeat_ack"}))
                         continue
 
@@ -61,15 +83,17 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, session_id: str
                     crew_response = await crew_coordinator.process_user_interaction(
                         user_message, user_id, conversation.id, persona_settings, async_db
                     )
-                    await memory_service.store_message(async_db, conversation.id, "assistant", crew_response['content'],
-                                                       emotion_score=crew_response.get('emotion_insights'),
-                                                       metadata=crew_response.get('metadata', {}))
+                    await memory_service.store_message(
+                        async_db, conversation.id, "assistant", crew_response["content"],
+                        emotion_score=crew_response.get("emotion_insights"),
+                        metadata=crew_response.get("metadata", {})
+                    )
                     await async_db.commit()
                     await socket_manager.send_typing_indicator(user_id, False)
 
                     await socket_manager.send_personal_message(
-                        crew_response['content'], websocket, "chat_response",
-                        {"agent_coordination": crew_response.get('agent_coordination', {})}
+                        crew_response["content"], websocket, "chat_response",
+                        {"agent_coordination": crew_response.get("agent_coordination", {})}
                     )
                 except WebSocketDisconnect:
                     break
@@ -82,6 +106,7 @@ async def websocket_endpoint(websocket: WebSocket, user_id: int, session_id: str
     finally:
         socket_manager.disconnect(websocket, user_id, session_id)
         await proactive_service.stop_proactive_monitoring(user_id)
+
 
 
 # ======================
