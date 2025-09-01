@@ -1,38 +1,65 @@
 // src/chat/ChatPage.tsx
 import { useState, useRef, useEffect } from "react";
-import { chatWithAI } from "wasp/client/operations";
-import { Loader2, Send, Bot, User } from "lucide-react";
+import { chatWithAI, connectWebSocket, closeWebSocket } from "wasp/client/operations";
+import { Loader2, Send, Bot, User, Wifi, WifiOff } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import type { Message } from "./types";
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content: "Hello! How can I help you today?",
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [conversationId, setConversationId] = useState<string | undefined>(
-    undefined
-  );
+  const [isConnecting, setIsConnecting] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
+  const [conversationId, setConversationId] = useState<string | undefined>();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [sessionId] = useState(() => `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
-  // Auto-scroll to bottom whenever messages change
+  // Initialize WebSocket connection
+  useEffect(() => {
+    const initializeConnection = async () => {
+      try {
+        setIsConnecting(true);
+        await connectWebSocket({ session_id: sessionId });
+        setIsConnected(true);
+        
+        // Add welcome message
+        const welcomeMessage: Message = {
+          id: "welcome",
+          role: "assistant",
+          content: "Hello! I'm connected and ready to help you.",
+          metadata: {
+            timestamp: new Date().toISOString(),
+          }
+        };
+        setMessages([welcomeMessage]);
+      } catch (error) {
+        console.error('Failed to connect to WebSocket:', error);
+        // Still allow chatting with REST fallback
+        const fallbackMessage: Message = {
+          id: "fallback",
+          role: "assistant",
+          content: "Hello! How can I help you today? (Using REST connection)",
+        };
+        setMessages([fallbackMessage]);
+      } finally {
+        setIsConnecting(false);
+      }
+    };
+
+    initializeConnection();
+
+    // Cleanup on unmount
+    return () => {
+      closeWebSocket({ session_id: sessionId }).catch(console.error);
+    };
+  }, [sessionId]);
+
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
-
-  // Debug: Log session ID on component mount
-  useEffect(() => {
-    console.log('=== DEBUG: ChatPage mounted ===');
-    console.log('Session ID:', sessionId);
-    console.log('Initial conversationId:', conversationId);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,52 +76,31 @@ export default function ChatPage() {
     setInput("");
     setIsLoading(true);
 
-    console.log('=== DEBUG: Starting chat request ===');
-    console.log('Input message:', input);
-    console.log('Conversation ID:', conversationId);
-    console.log('Session ID:', sessionId);
-    console.log('==============================');
-
     try {
-      const { reply, agent_used, conversation_id, metadata, agent_insights } = await chatWithAI({
+      const response = await chatWithAI({
         message: input,
         conversation_id: conversationId ? parseInt(conversationId) : undefined,
         session_id: sessionId,
       });
 
-      console.log('=== DEBUG: Chat response received ===');
-      console.log('Reply:', reply);
-      console.log('Agent used:', agent_used);
-      console.log('New conversation_id:', conversation_id);
-      console.log('Metadata:', metadata);
-      console.log('Agent insights:', agent_insights);
-      console.log('==============================');
-
-      if (conversation_id) {
-        setConversationId(conversation_id.toString());
-        console.log('Updated conversationId:', conversation_id.toString());
+      if (response.conversation_id) {
+        setConversationId(response.conversation_id.toString());
       }
 
       const aiMessage: Message = {
         id: Date.now().toString(),
         role: "assistant",
-        content: reply,
-        agentUsed: agent_used,
-        conversationId: conversation_id?.toString(),
-        metadata,
-        agentInsights: agent_insights,
+        content: response.reply,
+        agentUsed: response.agent_used,
+        conversationId: response.conversation_id?.toString(),
+        metadata: response.metadata,
+        agentInsights: response.agent_insights,
       };
 
       setMessages((prev) => [...prev, aiMessage]);
 
     } catch (err: any) {
-      console.error('=== DEBUG: Chat error ===');
-      console.error('Error:', err);
-      console.error('Error name:', err?.name);
-      console.error('Error message:', err?.message);
-      console.error('Error status:', err?.status);
-      console.error('==============================');
-
+      console.error('Chat error:', err);
       const errorMessage: Message = {
         id: Date.now().toString(),
         role: "assistant",
@@ -117,9 +123,29 @@ export default function ChatPage() {
             </div>
             <h1 className="text-base font-semibold">AI Assistant</h1>
           </div>
-          {/* Debug info */}
-          <div className="ml-auto text-xs text-muted-foreground">
-            Session: {sessionId.substring(0, 8)}...
+          
+          {/* Connection status */}
+          <div className="ml-auto flex items-center gap-2">
+            {isConnecting ? (
+              <div className="flex items-center gap-1 text-xs text-amber-600">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                <span>Connecting...</span>
+              </div>
+            ) : isConnected ? (
+              <div className="flex items-center gap-1 text-xs text-green-600">
+                <Wifi className="h-3 w-3" />
+                <span>Connected</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1 text-xs text-red-600">
+                <WifiOff className="h-3 w-3" />
+                <span>Disconnected</span>
+              </div>
+            )}
+            
+            <div className="text-xs text-muted-foreground">
+              Session: {sessionId.substring(0, 8)}...
+            </div>
           </div>
         </div>
       </div>
@@ -177,7 +203,6 @@ export default function ChatPage() {
             </div>
           ))}
 
-          {/* Loading Indicator */}
           {isLoading && (
             <div className="flex gap-2.5">
               <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted">
@@ -204,13 +229,13 @@ export default function ChatPage() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Message AI Assistant..."
-                disabled={isLoading}
+                disabled={isLoading || isConnecting}
                 className="pr-12 rounded-full border-0 bg-muted/50 focus-visible:ring-1"
               />
               <Button
                 type="submit"
                 size="sm"
-                disabled={isLoading || !input.trim()}
+                disabled={isLoading || isConnecting || !input.trim()}
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full p-0"
               >
                 {isLoading ? (

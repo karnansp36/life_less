@@ -104,12 +104,26 @@ page ChatPage {
   authRequired: true, // or false if you want public access
   component: import ChatPage from "@src/chat/ChatPage"
 }
+// main.wasp
+action connectWebSocket {
+  fn: import { connectWebSocket } from "@src/chat/operations"
+}
+
+action sendWebSocketMessage {
+  fn: import { sendWebSocketMessage } from "@src/chat/operations"
+}
+
+action closeWebSocket {
+  fn: import { closeWebSocket } from "@src/chat/operations"
+}
 
 action chatWithAI {
   fn: import { chatWithAI } from "@src/chat/operations"
 }
 
-
+action checkWebSocketStatus {
+  fn: import { checkWebSocketStatus } from "@src/chat/operations"
+}
 
 
 
